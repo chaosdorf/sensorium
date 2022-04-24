@@ -127,7 +127,7 @@ function push_data()
 end
 
 function log_restart()
-	print("Network error " .. wifi.sta.status() .. ". Restarting in 20 seconds.")
+	print("Network error " .. wifi.sta.status() .. ". Restarting in 30 seconds.")
 	delayed_restart:start()
 end
 
@@ -143,6 +143,7 @@ function connect_mqtt()
 	print("Connecting to MQTT " .. mqtt_host)
 	delayed_restart:stop()
 	mqttclient:on("connect", setup_client)
+	mqttclient:on("connfail", log_restart)
 	mqttclient:on("offline", log_restart)
 	mqttclient:lwt(mqtt_prefix .. "/state", "offline", 0, 1)
 	mqttclient:connect(mqtt_host)
@@ -159,7 +160,9 @@ function connect_wifi()
 	wifi.sta.connect()
 end
 
-delayed_restart:register(20 * 1000, tmr.ALARM_SINGLE, node.restart)
+delayed_restart:register(30 * 1000, tmr.ALARM_SINGLE, node.restart)
 push_timer:register(60 * 1000, tmr.ALARM_SEMI, push_data)
+
+delayed_restart:start()
 
 connect_wifi()
