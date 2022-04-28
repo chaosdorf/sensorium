@@ -2,11 +2,11 @@
 -- 20 .. 70 mA @ 5V
 station_cfg = {}
 dofile("wifi.lua")
-mqtt_host = 'mqtt.chaosdorf.space'
+mqtt_host = "mqtt.chaosdorf.space"
 
 delayed_restart = tmr.create()
 push_timer = tmr.create()
-chipid = node.chipid()
+chipid = string.format("%06X", node.chipid())
 mqtt_prefix = "sensor/esp8266_" .. chipid
 mqttclient = mqtt.Client("dmap_esp8266_" .. chipid, 120)
 

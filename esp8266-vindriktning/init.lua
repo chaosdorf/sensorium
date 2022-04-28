@@ -4,7 +4,7 @@ dofile("wifi.lua")
 mqtt_host = "mqtt.chaosdorf.space"
 
 delayed_restart = tmr.create()
-chip_id = node.chipid()
+chip_id = string.format("%06X", node.chipid())
 device_id = "esp8266_" .. chip_id
 mqtt_prefix = "sensor/" .. device_id
 mqttclient = mqtt.Client(device_id, 120)
