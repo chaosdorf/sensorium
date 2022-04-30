@@ -6,12 +6,14 @@ mqtt_host = "mqtt.chaosdorf.space"
 
 delayed_restart = tmr.create()
 push_timer = tmr.create()
-chipid = string.format("%06X", node.chipid())
-mqtt_prefix = "sensor/esp8266_" .. chipid
-mqttclient = mqtt.Client("dmap_esp8266_" .. chipid, 120)
+chipid = node.chipid()
+hexid = string.format("%06X", chipid)
+device_id = "esp8266_" .. hexid
+mqtt_prefix = "sensor/" .. device_id
+mqttclient = mqtt.Client(device_id, 120)
 
-print("https://wiki.chaosdorf.de/tbd")
-print("ESP8266 " .. chipid)
+print("https://wiki.chaosdorf.de/Sensorium")
+print("ESP8266 " .. hexid)
 
 gpio.mode(4, gpio.OUTPUT)
 gpio.write(4, 0)
@@ -119,7 +121,7 @@ function push_data()
 	end
 	json_str = json_str .. '"rssi_dbm": ' .. wifi.sta.getrssi() .. '}'
 	print("Publishing " .. json_str)
-	mqttclient:publish("sensor/esp8266_" .. chipid .. "/data", json_str, 0, 0, function(client)
+	mqttclient:publish("sensor/" .. device_id .. "/data", json_str, 0, 0, function(client)
 		print("Naptime")
 		collectgarbage()
 	end)
@@ -142,8 +144,7 @@ function connect_mqtt()
 	print("IP address: " .. wifi.sta.getip())
 	print("Connecting to MQTT " .. mqtt_host)
 	delayed_restart:stop()
-	mqttclient:on("connect", setup_client)
-	mqttclient:on("connfail", log_restart)
+	mqttclient:on("connect", hass_register)
 	mqttclient:on("offline", log_restart)
 	mqttclient:lwt(mqtt_prefix .. "/state", "offline", 0, 1)
 	mqttclient:connect(mqtt_host)
@@ -158,6 +159,46 @@ function connect_wifi()
 	wifi.setmode(wifi.STATION)
 	wifi.sta.config(station_cfg)
 	wifi.sta.connect()
+end
+
+function hass_register()
+	local publish_queue = {}
+	local hass_device = string.format('{"connections":[["mac","%s"]],"identifiers":["%s"],"model":"ESP8266","name":"Sensorium %s","manufacturer":"derf"}', wifi.sta.getmac(), device_id, hexid)
+	local hass_entity_base = string.format('"device":%s,"state_topic":"%s/data","expire_after":90', hass_device, mqtt_prefix)
+	if have_am2320 or have_bme680 or have_hdc1080 or have_lm75 then
+		local hass_temp = string.format('{%s,"name":"Temperature","object_id":"%s_temperature","unique_id":"%s_temperature","device_class":"temperature","unit_of_measurement":"°c","value_template":"{{value_json.temperature_celsius}}"}', hass_entity_base, device_id, device_id)
+		table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/temperature/config", hass_temp})
+	end
+	if have_am2320 or have_bme680 or have_hdc1080 then
+		local hass_humi = string.format('{%s,"name":"Humidity","object_id":"%s_humidity","unique_id":"%s_humidity","device_class":"humidity","unit_of_measurement":"%%","value_template":"{{value_json.humidity_relpercent}}"}', hass_entity_base, device_id, device_id)
+		table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/humidity/config", hass_humi})
+	end
+	if have_bme680 then
+		local hass_pressure = string.format('{%s,"name":"Pressure","object_id":"%s_pressure","unique_id":"%s_pressure","device_class":"pressure","unit_of_measurement":"hPa","value_template":"{{value_json.pressure_hpa}}"}', hass_entity_base, device_id, device_id)
+		table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/pressure/config", hass_pressure})
+	end
+	if have_photoresistor then
+		local hass_brightness = string.format('{%s,"name":"Brightness","object_id":"%s_brightness","unique_id":"%s_brightness","device_class":"illuminance","unit_of_measurement":"%%","value_template":"{{value_json.brightness_percent}}"}', hass_entity_base, device_id, device_id)
+		table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/brightness/config", hass_brightness})
+	end
+	local hass_rssi = string.format('{%s,"name":"RSSI","object_id":"%s_rssi","unique_id":"%s_rssi","device_class":"signal_strength","unit_of_measurement":"dBm","value_template":"{{value_json.rssi_dbm}}","entity_category":"diagnostic"}', hass_entity_base, device_id, device_id)
+	table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/rssi/config", hass_rssi})
+	hass_mqtt(publish_queue)
+end
+
+function hass_mqtt(queue)
+	local table_n = table.getn(queue)
+	if table_n > 0 then
+		local topic = queue[table_n][1]
+		local message = queue[table_n][2]
+		table.remove(queue)
+		mqttclient:publish(topic, message, 0, 1, function(client)
+			hass_mqtt(queue)
+		end)
+	else
+		collectgarbage()
+		setup_client()
+	end
 end
 
 delayed_restart:register(30 * 1000, tmr.ALARM_SINGLE, node.restart)
