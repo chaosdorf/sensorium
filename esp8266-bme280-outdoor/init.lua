@@ -35,7 +35,7 @@ end
 -- -> adc.read(0) / 1023 * (470 / 100) == VCC
 -- -> adc.read(0) * 469 / 102 ~= VCC_mV
 function get_battery_mv()
-	return adc.read(0) * 439 / 102
+	return adc.read(0) * 469 / 102
 end
 
 function get_battery_percent(bat_mv)
