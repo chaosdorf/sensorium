@@ -10,12 +10,19 @@ mqttclient = mqtt.Client(device_id, 120)
 print("https://wiki.chaosdorf.de/Sensorium")
 print("ESP8266 " .. chip_id)
 
-gpio.mode(6, gpio.OUTPUT)
-gpio.mode(5, gpio.OUTPUT)
-gpio.write(6, 1)
-gpio.write(5, 1)
-
-i2c.setup(0, 2, 1, i2c.SLOW)
+if node.chipid() == 3709664 then
+	gpio.mode(5, gpio.OUTPUT)
+	gpio.mode(6, gpio.OUTPUT)
+	gpio.write(5, 1)
+	gpio.write(6, 1)
+	i2c.setup(0, 1, 2, i2c.SLOW)
+else
+	gpio.mode(6, gpio.OUTPUT)
+	gpio.mode(5, gpio.OUTPUT)
+	gpio.write(6, 1)
+	gpio.write(5, 1)
+	i2c.setup(0, 2, 1, i2c.SLOW)
+end
 
 if not bme280.setup() then
 	print("BME280 setup failed")
