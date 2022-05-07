@@ -88,7 +88,19 @@ function publish_reading()
 
 	local json_str = string.format('{"temperature_celsius":%s,"humidity_relpercent":%s,"pressure_hpa":%s,"pressure_sealevel_hpa":%s,"battery_mv":%d,"battery_percent":%d,"rssi_dbm":%d}', temp, humi, pressure, sealevel, bat_mv, bat_percent, rssi)
 	mqttclient:publish(mqtt_prefix .. "/data", json_str, 0, 0, function(client)
-		naptime()
+		if influx_url and influx_attr then
+			publish_influx(temp, humi, pressure, rssi, bat_mv)
+		else
+			naptime()
+		end
+	end)
+end
+
+function publish_influx(temp, humi, pressure, rssi_dbm, bat_mv)
+	http.post(influx_url, nil, string.format("bme280%s temperature_celsius=%s,humidity_relpercent=%s,pressure_hpa=%s", influx_attr, temp, humi, pressure), function(code, data)
+		http.post(influx_url, nil, string.format("esp8266%s rssi_dbm=%d,battery_mv=%d", influx_attr, rssi_dbm, bat_mv), function(code, data)
+			naptime()
+		end)
 	end)
 end
 
