@@ -39,13 +39,13 @@ function get_battery_mv()
 end
 
 function get_battery_percent(bat_mv)
-	if bat_mv > 4100 then
+	if bat_mv > 4160 then
 		return 100
 	end
-	if bat_mv < 3400 then
+	if bat_mv < 3360 then
 		return 0
 	end
-	return (bat_mv - 3400) / 7
+	return (bat_mv - 3360) / 8
 end
 
 function connect_mqtt()
