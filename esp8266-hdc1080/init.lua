@@ -1,7 +1,6 @@
 -- nodemcu-release-13-modules-2022-04-12-17-11-54-integer.bin
 -- 20 .. 70 mA @ 5V
 station_cfg = {}
-dofile("wifi.lua")
 mqtt_host = "mqtt.chaosdorf.space"
 
 watchdog = tmr.create()
@@ -11,6 +10,8 @@ hexid = string.format("%06X", chipid)
 device_id = "esp8266_" .. hexid
 mqtt_prefix = "sensor/" .. device_id
 mqttclient = mqtt.Client(device_id, 120)
+
+dofile("wifi.lua")
 
 print("https://wiki.chaosdorf.de/Sensorium")
 print("ESP8266 " .. hexid)
@@ -34,6 +35,8 @@ if chipid == 1259750 then
 elseif chipid == 1416820 then
 	pin_sda = 2
 	pin_scl = 1
+	gpio.mode(5, gpio.OUTPUT)
+	gpio.write(5, 0)
 elseif chipid == 1417132 then
 	have_am2320 = false
 	have_hdc1080 = true
@@ -100,37 +103,52 @@ end
 function push_data()
 	local brightness = adc.read(0)
 	local json_str = '{'
+	local influx_str = nil
 	if have_bme680 then
 		local T, P, H, G, QNH = bme680.read()
 		if T ~= nil then
 			json_str = json_str .. string.format('"temperature_celsius": %d.%02d, "humidity_relpercent": %d.%03d, "pressure_hpa": %d.%02d, "gas_ohm": %d, ', T/100, T%100, H/1000, H%1000, P/100, P%100, G)
+			influx_str = string.format("temperature_celsius=%d.%02d,humidity_relpercent=%d.%03d,pressure_hpa=%d.%02d,gas_ohm:%d", T/100, T%100, H/1000, H%1000, P/100, P%100, G)
 		end
 		bme680.startreadout()
 	elseif have_am2320 then
 		local am_rh, am_t = am2320.read()
 		json_str = json_str .. string.format('"temperature_celsius": %d.%01d, "humidity_relpercent": %d.%01d, ', am_t/10, am_t%10, am_rh/10, am_rh%10)
+		influx_str = string.format("temperature_celsius=%d.%01d,humidity_relpercent=%d.%01d", am_t/10, am_t%10, am_rh/10, am_rh%10)
 	elseif have_hdc1080 then
 		local t, h = hdc1080.read()
 		json_str = json_str .. string.format('"temperature_celsius": %.1f, "humidity_relpercent": %.1f, ', t, h)
+		influx_str = string.format("temperature_celsius=%.1f,humidity_relpercent=%.1f", t, h)
 	elseif have_lm75 then
 		local str_temp = read_lm75()
 		json_str = json_str .. '"temperature_celsius": ' .. str_temp .. ', '
+		influx_str = "temperature_celsius=" .. str_temp
 	end
 	if have_photoresistor then
 		json_str = json_str .. string.format('"brightness_percent": %d.%01d, ', brightness/10, brightness%10)
+		influx_str = influx_str .. string.format(",brightness_percent=%d.%01d", brightness/10, brightness%10)
 	end
 	json_str = json_str .. '"rssi_dbm": ' .. wifi.sta.getrssi() .. '}'
 	print("Publishing " .. json_str)
 	mqttclient:publish("sensor/" .. device_id .. "/data", json_str, 0, 0, function(client)
-		print("Naptime")
-		collectgarbage()
+		watchdog:start(true)
+		if influx_url and influx_attr and influx_str then
+			publish_influx(influx_str)
+		else
+			collectgarbage()
+		end
 	end)
 	push_timer:start()
 end
 
-function log_restart()
-	print("Network error " .. wifi.sta.status() .. ". Restarting in 30 seconds.")
-	delayed_restart:start()
+function publish_influx(payload)
+	http.post(influx_url, influx_header, "sensorium" .. influx_attr .. " " .. payload, function(code, data)
+		collectgarbage()
+	end)
+end
+
+function log_error()
+	print("Network error " .. wifi.sta.status())
 end
 
 function setup_client()
