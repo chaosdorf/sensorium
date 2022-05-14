@@ -4,7 +4,7 @@ station_cfg = {}
 dofile("wifi.lua")
 mqtt_host = "mqtt.chaosdorf.space"
 
-delayed_restart = tmr.create()
+watchdog = tmr.create()
 push_timer = tmr.create()
 chipid = node.chipid()
 hexid = string.format("%06X", chipid)
@@ -143,9 +143,8 @@ end
 function connect_mqtt()
 	print("IP address: " .. wifi.sta.getip())
 	print("Connecting to MQTT " .. mqtt_host)
-	delayed_restart:stop()
 	mqttclient:on("connect", hass_register)
-	mqttclient:on("offline", log_restart)
+	mqttclient:on("offline", log_error)
 	mqttclient:lwt(mqtt_prefix .. "/state", "offline", 0, 1)
 	mqttclient:connect(mqtt_host)
 end
@@ -154,8 +153,8 @@ function connect_wifi()
 	print("WiFi MAC: " .. wifi.sta.getmac())
 	print("Connecting to ESSID " .. station_cfg.ssid)
 	wifi.eventmon.register(wifi.eventmon.STA_GOT_IP, connect_mqtt)
-	wifi.eventmon.register(wifi.eventmon.STA_DHCP_TIMEOUT, log_restart)
-	wifi.eventmon.register(wifi.eventmon.STA_DISCONNECTED, log_restart)
+	wifi.eventmon.register(wifi.eventmon.STA_DHCP_TIMEOUT, log_error)
+	wifi.eventmon.register(wifi.eventmon.STA_DISCONNECTED, log_error)
 	wifi.setmode(wifi.STATION)
 	wifi.sta.config(station_cfg)
 	wifi.sta.connect()
@@ -201,9 +200,8 @@ function hass_mqtt(queue)
 	end
 end
 
-delayed_restart:register(30 * 1000, tmr.ALARM_SINGLE, node.restart)
+watchdog:register(90 * 1000, tmr.ALARM_SEMI, node.restart)
 push_timer:register(60 * 1000, tmr.ALARM_SEMI, push_data)
-
-delayed_restart:start()
+watchdog:start()
 
 connect_wifi()
