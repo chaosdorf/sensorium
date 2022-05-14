@@ -108,7 +108,7 @@ function push_data()
 		local T, P, H, G, QNH = bme680.read()
 		if T ~= nil then
 			json_str = json_str .. string.format('"temperature_celsius": %d.%02d, "humidity_relpercent": %d.%03d, "pressure_hpa": %d.%02d, "gas_ohm": %d, ', T/100, T%100, H/1000, H%1000, P/100, P%100, G)
-			influx_str = string.format("temperature_celsius=%d.%02d,humidity_relpercent=%d.%03d,pressure_hpa=%d.%02d,gas_ohm:%d", T/100, T%100, H/1000, H%1000, P/100, P%100, G)
+			influx_str = string.format("temperature_celsius=%d.%02d,humidity_relpercent=%d.%03d,pressure_hpa=%d.%02d,gas_ohm=%d", T/100, T%100, H/1000, H%1000, P/100, P%100, G)
 		end
 		bme680.startreadout()
 	elseif have_am2320 then
