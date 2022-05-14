@@ -126,7 +126,9 @@ function push_data()
 	end
 	if have_photoresistor then
 		json_str = json_str .. string.format('"brightness_percent": %d.%01d, ', brightness/10, brightness%10)
-		influx_str = influx_str .. string.format(",brightness_percent=%d.%01d", brightness/10, brightness%10)
+		if influx_str then
+			influx_str = influx_str .. string.format(",brightness_percent=%d.%01d", brightness/10, brightness%10)
+		end
 	end
 	json_str = json_str .. '"rssi_dbm": ' .. wifi.sta.getrssi() .. '}'
 	print("Publishing " .. json_str)
