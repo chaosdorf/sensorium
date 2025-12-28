@@ -1,11 +1,15 @@
-station_cfg = {}
+station_cfg = {save=false}
 dofile("wifi.lua")
-mqtt_host = "mqtt.derf0.net"
+mqtt_host = "mqtt.chaosdorf.space"
 
 chip_id = string.format("%06X", node.chipid())
 device_id = "esp8266_" .. chip_id
 mqtt_prefix = "sensor/" .. device_id
 mqttclient = mqtt.Client(device_id, 120)
+sleep_time = 800
+
+adc_mul = 469
+adc_div = 102
 
 print("https://wiki.chaosdorf.de/Sensorium")
 print("ESP8266 " .. chip_id)
@@ -15,6 +19,14 @@ if node.chipid() == 3709664 then
 	gpio.mode(6, gpio.OUTPUT)
 	gpio.write(5, 1)
 	gpio.write(6, 1)
+	i2c.setup(0, 1, 2, i2c.SLOW)
+elseif node.chipid() == 6586591 then
+	adc_mul = 467
+	adc_div = 104
+	gpio.mode(6, gpio.OUTPUT)
+	gpio.mode(5, gpio.OUTPUT)
+	gpio.write(6, 1)
+	gpio.write(5, 1)
 	i2c.setup(0, 1, 2, i2c.SLOW)
 else
 	gpio.mode(6, gpio.OUTPUT)
@@ -35,7 +47,7 @@ end
 -- -> adc.read(0) / 1023 * (470 / 100) == VCC
 -- -> adc.read(0) * 469 / 102 ~= VCC_mV
 function get_battery_mv()
-	return adc.read(0) * 469 / 102
+	return adc.read(0) * adc_mul / adc_div
 end
 
 function get_battery_percent(bat_mv)
@@ -70,6 +82,16 @@ function publish_reading()
 	local bat_percent = get_battery_percent(bat_mv)
 	local rssi = wifi.sta.getrssi()
 
+	if bat_mv > 4150 then
+		sleep_time = 300
+	elseif bat_mv < 3600 then
+		sleep_time = 1600
+	elseif bat_mv < 3900 then
+		sleep_time = 800
+	elseif bat_mv < 4060 then
+		sleep_time = 400
+	end
+
 	if T == nil then
 		print("BME280 readout failed")
 		local json_str = string.format('{"battery_mv":%d,"battery_percent":%d,"rssi_dbm":%d}', bat_mv, bat_percent, rssi)
@@ -81,8 +103,8 @@ function publish_reading()
 
 	local Tsgn = (T < 0 and -1 or 1)
 	T = Tsgn*T
-	local temp = string.format("%s%d.%02d", Tsgn<0 and "-" or "", T/100, T%100)
-	local humi = string.format("%d.%03d", H/1000, H%1000)
+	local temp = string.format("%s%d.%01d", Tsgn<0 and "-" or "", T/100, (T%100) / 10)
+	local humi = string.format("%d.%01d", H/1000, (H%1000) / 100)
 	local pressure = string.format("%d.%03d", P/1000, P%1000)
 	local sealevel = string.format("%d.%03d", QNH/1000, QNH%1000)
 
@@ -106,8 +128,8 @@ end
 
 function hass_register()
 	local hass_device = string.format('{"connections":[["mac","%s"]],"identifiers":["%s"],"model":"ESP8266","name":"Sensorium %s","manufacturer":"derf"}', wifi.sta.getmac(), device_id, chip_id)
-	local hass_entity_base = string.format('"device":%s,"state_topic":"%s/data","expire_after":900', hass_device, mqtt_prefix)
-	local hass_temperature = string.format('{%s,"name":"Temperature","object_id":"%s_temperature","unique_id":"%s_temperature","device_class":"temperature","unit_of_measurement":"°c","value_template":"{{value_json.temperature_celsius}}"}', hass_entity_base, device_id, device_id)
+	local hass_entity_base = string.format('"device":%s,"state_topic":"%s/data","expire_after":1800', hass_device, mqtt_prefix, mqtt_prefix)
+	local hass_temperature = string.format('{%s,"name":"Temperature","object_id":"%s_temperature","unique_id":"%s_temperature","device_class":"temperature","unit_of_measurement":"°C","value_template":"{{value_json.temperature_celsius}}"}', hass_entity_base, device_id, device_id)
 	local hass_humidity = string.format('{%s,"name":"Humidity","object_id":"%s_humidity","unique_id":"%s_humidity","device_class":"humidity","unit_of_measurement":"%%","value_template":"{{value_json.humidity_relpercent}}"}', hass_entity_base, device_id, device_id)
 	local hass_pressure = string.format('{%s,"name":"Pressure","object_id":"%s_pressure","unique_id":"%s_pressure","device_class":"pressure","unit_of_measurement":"hPa","value_template":"{{value_json.pressure_hpa}}"}', hass_entity_base, device_id, device_id)
 	local hass_battery = string.format('{%s,"name":"Battery","object_id":"%s_battery","unique_id":"%s_battery","device_class":"battery","unit_of_measurement":"%%","value_template":"{{value_json.battery_percent}}","entity_category":"diagnostic"}', hass_entity_base, device_id, device_id)
@@ -123,10 +145,18 @@ function hass_register()
 end
 
 function naptime()
-	print("Naptime")
-	gpio.write(5, 0)
-	gpio.write(6, 0)
-	rtctime.dsleep(800 * 1000000)
+	if sleep_time < 40 then
+		print("Waiting")
+		go_to_sleep:start(true)
+		local next_reading = tmr.create()
+		next_reading:register(sleep_time * 1000, tmr.ALARM_SINGLE, publish_reading)
+		next_reading:start()
+	else
+		print("Naptime")
+		gpio.write(5, 0)
+		gpio.write(6, 0)
+		rtctime.dsleep(sleep_time * 1000000)
+	end
 end
 
 go_to_sleep = tmr.create()
