@@ -185,7 +185,7 @@ function hass_register()
 	local hass_device = string.format('{"connections":[["mac","%s"]],"identifiers":["%s"],"model":"ESP8266","name":"Sensorium %s","manufacturer":"derf"}', wifi.sta.getmac(), device_id, hexid)
 	local hass_entity_base = string.format('"device":%s,"state_topic":"%s/data","expire_after":90', hass_device, mqtt_prefix)
 	if have_am2320 or have_bme680 or have_hdc1080 or have_lm75 then
-		local hass_temp = string.format('{%s,"name":"Temperature","object_id":"%s_temperature","unique_id":"%s_temperature","device_class":"temperature","unit_of_measurement":"°c","value_template":"{{value_json.temperature_celsius}}"}', hass_entity_base, device_id, device_id)
+		local hass_temp = string.format('{%s,"name":"Temperature","object_id":"%s_temperature","unique_id":"%s_temperature","device_class":"temperature","unit_of_measurement":"°C","value_template":"{{value_json.temperature_celsius}}"}', hass_entity_base, device_id, device_id)
 		table.insert(publish_queue, {"homeassistant/sensor/" .. device_id .. "/temperature/config", hass_temp})
 	end
 	if have_am2320 or have_bme680 or have_hdc1080 then
