@@ -1,12 +1,12 @@
 station_cfg = {save=false}
-dofile("wifi.lua")
-mqtt_host = "mqtt.chaosdorf.space"
 
 chip_id = string.format("%06X", node.chipid())
 device_id = "esp8266_" .. chip_id
 mqtt_prefix = "sensor/" .. device_id
 mqttclient = mqtt.Client(device_id, 120)
 sleep_time = 800
+
+dofile("wifi.lua")
 
 adc_mul = 469
 adc_div = 102
